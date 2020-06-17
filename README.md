@@ -11,5 +11,9 @@ nextflow run brucemoran/DNAseq_references
 Optional arguments:
   --version   STRING    GRCh37 or GRCh38 (default)
   --outDir    STRING    output directory path; NB ${params.version} dir is created therein
-  --exomebedurl     STRING      URL to exome bed file for intervals; NB assumes GRCh37 as all Illumina files are
+  --exometag    STRING    naming for exome outputs when supplied; tag is then used in somatic_n-of-1 and batch_somatic pipelines to select relevant exome data
+  and either
+  --exomebedurl     STRING      URL to exome bed file for intervals; NB assumes GRCh37
+  or
+  --exomebedfile     STRING      locally downloaded exome bed file for intervals; NB assumes GRCh37
 ```

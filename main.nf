@@ -11,10 +11,14 @@ if (params.help) {
   log.info 'Usage: '
   log.info 'nextflow run main.nf'
   log.info ''
-  log.info 'Optional arguments:'
-  log.info '    --version   STRING    GRCh37 or GRCh38 (default)'
-  log.info '    --outDir    STRING    output directory path; NB ${params.version} dir is created therein'
-  log.info '    --exomebedurl     STRING      URL to exome bed file for intervals; NB assumes GRCh37 as all Illumina exomes are'
+  log.info '  --version   STRING    GRCh37 or GRCh38 (default)'
+  log.info '  --outDir    STRING    output directory path; NB ${params.version} dir is created therein'
+  log.info '  --exometag    STRING    naming for exome outputs when supplied; tag is then used in somatic_n-of-1 and batch_somatic pipelines to select relevant exome data'
+  log.info '  and either'
+  log.info '  --exomebedurl     STRING      URL to exome bed file for intervals; NB assumes GRCh37'
+  log.info '  or'
+  log.info '  --exomebedfile     STRING      locally downloaded exome bed file for intervals; NB assumes GRCh37'
+  log.info ''
   log.info ''
   exit 1
 }
@@ -45,7 +49,7 @@ process fasta_dl {
   maxRetries 3
 
   output:
-  set file('*noChr.fasta'), file('*noChr.fasta.fai') into (fasta_bwa, fasta_seqza, fasta_msi, fasta_dict, fasta_2bit)
+  tuple file('*noChr.fasta'), file('*noChr.fasta.fai') into (fasta_bwa, fasta_seqza, fasta_msi, fasta_dict, fasta_2bit, fasta_exome_biall)
 
   script:
   if( params.version == 'GRCh37' )
@@ -73,11 +77,11 @@ process dict_pr {
   publishDir path: "$params.refDir", mode: "copy"
 
   input:
-  set file(fa), file(fai) from fasta_dict
+  tuple file(fa), file(fai) from fasta_dict
 
   output:
   file('*.dict') into dict_win
-  set file(fa), file(fai), file('*.dict') into (fasta_dict_exome, fasta_dict_wgs, fasta_dict_gensiz)
+  tuple file(fa), file(fai), file('*.dict') into (fasta_dict_exome, fasta_dict_wgs, fasta_dict_gensiz)
 
   """
   DICTO=\$(echo $fa | sed 's/fasta/dict/')
@@ -156,12 +160,12 @@ process ascat_loci {
 
 /* 2.0: Fasta processing
 */
-process fasta_pr {
+process bwa_index {
 
   publishDir path: "$params.refDir", mode: "copy"
 
   input:
-  set file(fa), file(fai) from fasta_bwa
+  tuple file(fa), file(fai) from fasta_bwa
 
   output:
   file('*') into complete_bwa
@@ -194,70 +198,138 @@ process dict_pr2 {
 }
 
 /* 3.0: Exome bed file and liftOver
-* of course why would Illumina supply exomes in GRCh38 in 2019?!?!?!?!
 */
+if(params.exomebedfile && params.exomebedurl){
+  Channel.from("Please only specify --exomebedurl or --exomebedfile!\nN.B. that subsquent runs using -resume can be used to add further -exomebedurl or --exomebedfile").println { it }
+}
+if(params.exomebedfile && params.exomebedurl){
+  exit 147
+}
+
+//set exometag
+if(!params.exometag){
+  if(params.exomebedurl) {
+    params.exometag = "${params.exomebedurl}".split("\\.")[0]
+  }
+  if(params.exomebedfile) {
+    params.exometag = "${params.exomebedfile}".split("\\.")[0]
+  }
+}
+
+if(params.exomebedurl){
+  process exome_url {
+
+    publishDir path: "$params.refDir/exome", mode: "copy"
+
+    output:
+    file("${params.exometag}.url.bed") into exome_bed
+
+    script:
+    """
+    ##download URL
+    echo "Exome bed used here is from:" > README.${params.exometag}.url.bed
+    echo ${params.exomebedurl} >> README.${params.exometag}.url.bed
+
+    wget ${params.exomebedurl}
+    if [[ ${params.exomebedurl} =~ zip\$ ]]; then
+      unzip -p *.zip > ${params.exometag}.url.bed
+    elif [[ ${params.exomebedurl} =~ bed\$ ]]; then
+
+      ##remove any non-chr, coord lines in top of file
+      CHR=\$(tail -n1 ${params.exomebedurl} | perl -ane 'print \$F[0];')
+      if [[ \$CHR =~ "chr" ]]; then
+        perl -ane 'if(\$F[0]=~m/^chr/){print \$_;}' ${params.exomebedurl} >  ${params.exometag}.url.bed
+      else
+        perl -ane 'if(\$F[0]=~m/^[0-9MXY]/){print \$_;}' ${params.exomebedurl} >  ${params.exometag}.url.bed
+      fi
+
+    else
+      echo "No ZIP or BED files resulting from ${params.exomebedurl}"
+      echo "Please try another URL with ZIP or BED file resulting"
+      exit 147
+    fi
+    """
+  }
+}
+
+if(params.exomebedfile){
+  Channel.fromPath("${params.exomebedfile}").set { exomebed_file }
+  process exome_file {
+
+    publishDir path: "$params.refDir/exome", mode: "copy"
+
+    input:
+    file(exomebedfile) from exomebed_file
+
+    output:
+    file("${params.exometag}.file.bed") into exome_bed
+
+    script:
+    """
+    ##use file as input
+    echo "Exome bed used here is from:" > README.${params.exometag}.file.bed
+    echo $exomebedfile >> README.${params.exometag}.file.bed
+
+    if [[ $exomebedfile =~ bed\$ ]]; then
+
+      ##remove any non-chr, coord lines in top of file
+      CHR=\$(tail -n1 $exomebedfile | perl -ane 'print \$F[0];')
+      if [[ \$CHR =~ "chr" ]]; then
+        perl -ane 'if(\$F[0]=~m/^chr/){print \$_;}' $exomebedfile >  ${params.exometag}.file.bed
+      else
+        perl -ane 'if(\$F[0]=~m/^[0-9MXY]/){print \$_;}' $exomebedfile >  ${params.exometag}.file.bed
+      fi
+
+    else
+      echo "BED file $exomebedfile is not a BED file, please retry"
+      exit 147
+    fi
+    """
+  }
+}
+
 process lift_over {
 
-  publishDir path: "$params.refDir", mode: "copy"
   errorStrategy 'retry'
   maxRetries 3
 
-  output:
-  set file("exome.bed"), file("README.exome.bed") into exome_bed
+  input:
+  file(exomebed) from exome_bed
 
-  when:
-  params.exomebedurl
+  output:
+  file('*.lift.bed') into exome_bed_liftd
 
   script:
   """
-  ##download URL
-  echo "Exome bed used here is from:" > README.exome.bed
-  echo ${params.exomebedurl} >> README.exome.bed
-
-  wget ${params.exomebedurl}
-  if [[ ${params.exomebedurl} =~ zip\$ ]]; then
-    unzip -p *.zip > exome.url.bed
-  elif [[ ${params.exomebedurl} =~ bed\$ ]]; then
-    mv *bed exome.url.bed
-  else
-    echo "No ZIP or BED files resulting from ${params.exomebedurl}"
-    echo "Please try another URL with ZIP or BED file resulting"
-    exit 0
-  fi
-
   if [[ ${params.version} != "GRCh37" ]]; then
     wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz
-    liftOver exome.url.bed hg19ToHg38.over.chain.gz exome.bed unmapped
-    echo "${params.exomebedurl} was liftOver'd from hg19 to hg38" >> README.exome.bed
+    liftOver $exomebed hg19ToHg38.over.chain.gz ${params.exometag}.lift.bed unmapped
   else
-    mv exome.url.bed exome.bed
+    cp $exomebed ${params.exometag}.lift.bed
   fi
   """
 }
 
 /* 3.11: Parse bed for exome
 */
-process exome_bed {
+process exome_bed_pr {
 
-  publishDir path: "$params.refDir", mode: "copy"
+  publishDir path: "$params.refDir/exome", mode: "copy", pattern: "*[.interval_list,.bed]"
 
   input:
-  set file(fa), file(fai), file(dict) from fasta_dict_exome
-  set file(exomebed), file(readme) from exome_bed
+  tuple file(fa), file(fai), file(dict) from fasta_dict_exome
+  file(exomelift) from exome_bed_liftd
 
   output:
-  file('*') into complete_exome
-  set file(fa), file(fai), file('exome.bed'), file(dict) into (exome_tabix, exome_fasta_biallgz)
-
-  when:
-  params.exomebedurl
+  file("${params.exometag}.bed.interval_list") into complete_exome
+  file("${params.exometag}.bed") into (exome_tabix, exome_biallgz)
 
   script:
   """
   ##must test if all chr in fasta are in exome, else manta cries
   ##must test if all regions are greater than length zero or strelka cries
   ##must test if all seq.dict chrs are in bed and only they or BedToIntervalList cries
-  perl -ane 'if(\$F[1] == \$F[2]){\$F[2]++;} if(\$F[0] !~m/^chrM/){print join("\\t", @F[0..\$#F]) . "\\n";}' $exomebed | grep -v chrM | sed 's/chr//g' > tmp.bed
+  perl -ane 'if(\$F[1] == \$F[2]){\$F[2]++;} if(\$F[0] !~m/^chrM/){print join("\\t", @F[0..\$#F]) . "\\n";}' $exomelift | grep -v chrM | sed 's/chr//g' > tmp.bed
 
    grep @SQ $dict | cut -f2 | sed 's/SN://' | while read CHR; do
    TESTCHR=\$(awk -v chrs=\$CHR '\$1 == chrs' tmp.bed | wc -l)
@@ -267,14 +339,13 @@ process exome_bed {
   done >> tmp.dict.bed
 
   ##always make interval list so we are in line with fasta
-  picard BedToIntervalList I=tmp.dict.bed O=exome.bed.interval_list SD=$dict
+  picard BedToIntervalList I=tmp.dict.bed O=${params.exometag}.interval_list SD=$dict
 
   ##BedToIntervalList (reason unknown) makes 1bp interval to 0bp interval, replace with original
-  perl -ane 'if(\$F[0]=~m/^@/){print \$_;next;} if(\$F[1] == \$F[2]){\$f=\$F[1]; \$f--; \$F[1]=\$f; print join("\\t", @F[0..\$#F]) . "\\n";} else{print \$_;}' exome.bed.interval_list > exome.bed.interval_list1
-  mv exome.bed.interval_list1 exome.bed.interval_list
+  perl -ane 'if(\$F[0]=~m/^@/){print \$_;next;} if(\$F[1] == \$F[2]){\$f=\$F[1]; \$f--; \$F[1]=\$f; print join("\\t", @F[0..\$#F]) . "\\n";} else{print \$_;}' ${params.exometag}.interval_list > ${params.exometag}.bed.interval_list
 
   ##output BED
-  grep -v "@" exome.bed.interval_list | cut -f 1,2,3,5 > exome.bed
+  grep -v "@" ${params.exometag}.bed.interval_list | cut -f 1,2,3,5 > ${params.exometag}.bed
   """
 }
 
@@ -282,14 +353,14 @@ process exome_bed {
 */
 process wgs_bed {
 
-  publishDir path: "$params.refDir", mode: "copy"
+  publishDir path: "$params.refDir/wgs", mode: "copy"
 
   input:
-  set file(fa), file(fai), file(dict) from fasta_dict_wgs
+  tuple file(fa), file(fai), file(dict) from fasta_dict_wgs
 
   output:
-  file('*') into complete_wgs
-  set file(fa), file(fai), file('wgs.bed'), file(dict) into (wgs_tabix, wgs_fasta_biallgz)
+  file('wgs.bed.interval_list') into complete_wgs
+  file('wgs.bed') into (wgs_tabix, wgs_fasta_biallgz)
 
   script:
   """
@@ -309,13 +380,14 @@ process wgs_bed {
 wgs_tabix.concat(exome_tabix).set { bint_tabix }
 process tabix_files {
 
-  publishDir path: "$params.refDir", mode: "copy"
+  publishDir path: "$params.refDir/exome", mode: "copy", pattern: "${params.exometag}*"
+  publishDir path: "$params.refDir/wgs", mode: "copy", pattern: "wgs*"
 
   input:
-  set file(fa), file(fai), file(bed), file(dict) from bint_tabix
+  file(bed) from bint_tabix
 
   output:
-  file('*') into complete_tabix
+  tuple file("${bed}.gz"), file("${bed}.gz.tbi") into complete_tabix
 
   script:
   """
@@ -329,16 +401,15 @@ process tabix_files {
 */
 process exome_biall {
 
-  publishDir path: "$params.refDir", mode: "copy"
-  errorStrategy 'retry'
-  maxRetries 3
-  label 'half_cpu_mem'
+  publishDir path: "$params.refDir/exome", mode: "copy"
 
   input:
-  set file(fa), file(fai), file(exomebed), file(dict) from exome_fasta_biallgz
+  file(exomebed) from exome_biallgz
+  tuple file(fasta), file(fai) from fasta_exome_biall
 
   output:
-  set file('af-only-gnomad.exome.*.noChr.vcf.gz'), file('af-only-gnomad.exome.*.noChr.vcf.gz.tbi') into exome_biallelicgz
+  tuple file('af-only-gnomad.*.noChr.vcf.gz'), file('af-only-gnomad.*.noChr.vcf.gz.tbi') into exome_biallelicgz
+  file('exome.biall.bed') into pcgrtoml_exome
 
   script:
   """
@@ -349,17 +420,21 @@ process exome_biall {
     gsutil cp gs://gatk-best-practices/somatic-b37/af-only-gnomad.raw.sites.vcf ./
     bgzip af-only-gnomad.raw.sites.vcf
     tabix af-only-gnomad.raw.sites.vcf.gz
-    bcftools view -R exome.biall.bed af-only-gnomad.raw.sites.vcf.gz | bcftools sort -T '.' | bgzip > af-only-gnomad.exome.hg19.noChr.vcf.gz
-    tabix af-only-gnomad.exome.hg19.noChr.vcf.gz
+    gunzip -c af-only-gnomad.raw.sites.vcf.gz |
+    bcftools view -R exome.biall.bed af-only-gnomad.raw.sites.vcf.gz | bcftools sort -T '.' > af-only-gnomad.exomerh.hg19.noChr.vcf
+    perl ${workflow.projectDir}/bin/reheader_vcf_fai.pl af-only-gnomad.exomerh.hg19.noChr.vcf $fai > af-only-gnomad.${params.exometag}.hg19.noChr.vcf
+    bgzip af-only-gnomad.${params.exometag}.hg19.noChr.vcf
+    tabix af-only-gnomad.${params.exometag}.hg19.noChr.vcf.gz
 
   else
 
     gsutil cp gs://gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz ./
     gunzip -c af-only-gnomad.hg38.vcf.gz | sed 's/chr//' | bgzip > af-only-gnomad.hg38.noChr.vcf.gz
     tabix af-only-gnomad.hg38.noChr.vcf.gz
-
-    bcftools view -R exome.biall.bed af-only-gnomad.hg38.noChr.vcf.gz | bcftools sort -T '.' | bgzip > af-only-gnomad.exome.hg38.noChr.vcf.gz
-    tabix af-only-gnomad.exome.hg38.noChr.vcf.gz
+    bcftools view -R exome.biall.bed af-only-gnomad.hg38.noChr.vcf.gz | bcftools sort -T '.' > af-only-gnomad.exomerh.hg38.noChr.vcf
+    perl ${workflow.projectDir}/bin/reheader_vcf_fai.pl af-only-gnomad.exomerh.hg38.noChr.vcf $fai > af-only-gnomad.${params.exometag}.hg38.noChr.vcf
+    bgzip af-only-gnomad.${params.exometag}.hg38.noChr.vcf
+    tabix af-only-gnomad.${params.exometag}.hg38.noChr.vcf.gz
   fi
   """
 }
@@ -368,16 +443,18 @@ process exome_biall {
 */
 process wgs_biall {
 
-  publishDir path: "$params.refDir", mode: "copy"
+  publishDir path: "$params.refDir/wgs", mode: "copy"
+
   errorStrategy 'retry'
   maxRetries 3
   label 'half_cpu_mem'
 
   input:
-  set file(fa), file(fai), file(wgsbed), file(dict) from wgs_fasta_biallgz
+  file(wgsbed) from wgs_fasta_biallgz
 
   output:
-  set file('af-only-gnomad.wgs.*.noChr.vcf.gz'), file('af-only-gnomad.wgs.*.noChr.vcf.gz.tbi') into wgs_biallelicgz
+  tuple file('af-only-gnomad.wgs.*.noChr.vcf.gz'), file('af-only-gnomad.wgs.*.noChr.vcf.gz.tbi') into wgs_biallelicgz
+  file('wgs.biall.bed') into pcgrtoml_wgs
 
   script:
   """
@@ -463,14 +540,14 @@ process msisen {
 */
 process pcgr_data {
 
-  publishDir "$params.refDir/pcgr", mode: "copy"
   errorStrategy 'retry'
   maxRetries 3
 
   output:
-  file('data/') into completedpcgrdb
+  file('*') into completedpcgrdb
   file("data/${params.versionlc}/.vep/") into pcgrdbvep
   file("data/${params.versionlc}/RELEASE_NOTES") into pcgrreleasenotes
+  file("data/${params.versionlc}/pcgr_configuration_default.toml") into pcgrtoml
 
   when:
   !params.nopcgr
@@ -488,6 +565,60 @@ process pcgr_data {
     tar -xf *.tgz
     rm -rf *.tgz
     """
+}
+
+process pcgr_save {
+
+  publishDir "$params.refDir/pcgr", mode: "copy"
+
+  input:
+  file(data) from completedpcgrdb
+
+  output:
+  file('data/') into savepcgrdb
+
+  script:
+  """
+  """
+}
+
+process pcgr_toml {
+
+  publishDir "$params.refDir/pcgr/data/${params.versionlc}", mode: "copy"
+
+  input:
+  file(toml) from pcgrtoml
+  file(exomebed) from pcgrtoml_exome
+  file(wgsbed) from pcgrtoml_wgs
+
+  output:
+  file("pcgr_configuration_${params.exometag}.toml") into pcgrtomld
+
+  script:
+  """
+  ##calculate exome size in MB
+  bedtools merge -i $exomebed > exome.biall.merge.bed
+  EMB=\$(echo -n \$(( \$(awk '{s+=\$3-\$2}END{print s}' exome.biall.merge.bed) / 1000000 )))
+  WMB=\$(echo -n \$(( \$(awk '{s+=\$3-\$2}END{print s}' $wgsbed) / 1000000 )))
+  export EMB WMB;
+
+  ##perl to parse standard toml config and output ours
+  perl -ane 'if((\$F[0]=~m/^tmb_intermediate_limit/) || (\$F[0]=~m/^target_size_mb/)){
+    next;
+  }
+  if(\$F[0]=~m/^\\[mutational_burden/) {
+    print "[mutational_burden]\\ntmb_intermediate_limit = 10\\ntarget_size_mb = \$ENV{'EMB'}\\n";
+  }
+  else { print \$_; }' $toml > pcgr_configuration_${params.exometag}.toml
+
+  perl -ane 'if((\$F[0]=~m/^tmb_intermediate_limit/) || (\$F[0]=~m/^target_size_mb/)){
+    next;
+  }
+  if(\$F[0]=~m/^\\[mutational_burden/) {
+    print "[mutational_burden]\\ntmb_intermediate_limit = 10\\ntarget_size_mb = \$ENV{'WMB'}\\n";
+  }
+  else { print \$_; }' $toml > pcgr_configuration_wgs.toml
+  """
 }
 
 /* 3.6: PCGR/CPSR VEP cache
@@ -552,3 +683,44 @@ process gensizxml {
   echo "</sequenceSizes>" >> GenomeSize.xml
   """
 }
+
+/* 4.0: Download hartwigmedical resource bundle
+*/
+process hartwigmed {
+
+  publishDir path: "$params.refDir", mode: "copy"
+  validExitStatus 0,1,2
+  errorStrategy 'retry'
+  maxRetries 3
+
+  output:
+  file('dbs') into gpldld
+  file('refgenomes/human_virus') into gpldle
+  file('GRIDSS_PON_37972v1') into gridsspon
+
+  script:
+  if( params.version == 'GRCh37' )
+    """
+    curl -o gridss-purple-linx-hg19-refdata-Dec2019.tar.gz "${params.hartwigGPLURL37}"
+    tar -xf gridss-purple-linx-hg19-refdata-Dec2019.tar.gz
+    mv hg19/dbs/ ./dbs/
+    mv hg19/refgenomes ./refgenomes
+
+    curl -o GRIDSS_PON_37972v1.zip "${params.hartwigGRIDSSURL37}"
+    unzip GRIDSS_PON_37972v1.zip
+    """
+
+  // else
+  //   """
+  //   ##no GRCh38 yet=(
+  //   """
+}
+
+
+java -Xmx3g -cp $GRIDSS_JAR gridss.AnnotateInsertedSequence \
+				REFERENCE_SEQUENCE=$reference \
+				INPUT=$raw_gridss_output \
+				OUTPUT=$annotated_gridss_output \
+				WORKER_THREADS=$threads \
+				ALIGNMENT=REPLACE \
+				REPEAT_MASKER_BED=hg19.fa.out.bed
