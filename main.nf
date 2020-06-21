@@ -49,7 +49,7 @@ process fasta_dl {
   maxRetries 3
 
   output:
-  tuple file('*noChr.fasta'), file('*noChr.fasta.fai') into (fasta_bwa, fasta_seqza, fasta_msi, fasta_dict, fasta_2bit, fasta_exome_biall)
+  tuple file('*noChr.fasta'), file('*noChr.fasta.fai') into (fasta_bwa, fasta_seqza, fasta_msi, fasta_dict, fasta_2bit, fasta_exome_biall, fasta_wgs_biall)
 
   script:
   if( params.version == 'GRCh37' )
@@ -81,7 +81,7 @@ process dict_pr {
 
   output:
   file('*.dict') into dict_win
-  tuple file(fa), file(fai), file('*.dict') into (fasta_dict_exome, fasta_dict_wgs, fasta_dict_gensiz)
+  tuple file(fa), file(fai), file('*.dict') into (fasta_dict_exome, fasta_dict_wgs, fasta_dict_gensiz, fasta_dict_gridss)
 
   """
   DICTO=\$(echo $fa | sed 's/fasta/dict/')
@@ -451,6 +451,7 @@ process wgs_biall {
 
   input:
   file(wgsbed) from wgs_fasta_biallgz
+  tuple file(fasta), file(fai) from fasta_wgs_biall
 
   output:
   tuple file('af-only-gnomad.wgs.*.noChr.vcf.gz'), file('af-only-gnomad.wgs.*.noChr.vcf.gz.tbi') into wgs_biallelicgz
@@ -465,7 +466,9 @@ process wgs_biall {
     gsutil cp gs://gatk-best-practices/somatic-b37/af-only-gnomad.raw.sites.vcf ./
     bgzip af-only-gnomad.raw.sites.vcf
     tabix af-only-gnomad.raw.sites.vcf.gz
-    bcftools view -R wgs.biall.bed af-only-gnomad.raw.sites.vcf.gz | bcftools sort -T '.' | bgzip > af-only-gnomad.wgs.hg19.noChr.vcf.gz
+    bcftools view -R wgs.biall.bed af-only-gnomad.raw.sites.vcf.gz | bcftools sort -T '.' > af-only-gnomad.wgsh.hg19.noChr.vcf
+    perl ${workflow.projectDir}/bin/reheader_vcf_fai.pl af-only-gnomad.wgsh.hg19.noChr.vcf $fai > af-only-gnomad.wgs.hg19.noChr.vcf
+    bgzip af-only-gnomad.wgs.hg19.noChr.vcf
     tabix af-only-gnomad.wgs.hg19.noChr.vcf.gz
 
   else
@@ -474,7 +477,9 @@ process wgs_biall {
     gunzip -c af-only-gnomad.hg38.vcf.gz | sed 's/chr//' | bgzip > af-only-gnomad.hg38.noChr.vcf.gz
     tabix af-only-gnomad.hg38.noChr.vcf.gz
 
-    bcftools view -R wgs.biall.bed af-only-gnomad.hg38.noChr.vcf.gz | bcftools sort -T '.' | bgzip > af-only-gnomad.wgs.hg38.noChr.vcf.gz
+    bcftools view -R wgs.biall.bed af-only-gnomad.hg38.noChr.vcf.gz | bcftools sort -T '.' > af-only-gnomad.wgsh.hg38.noChr.vcf
+    perl ${workflow.projectDir}/bin/reheader_vcf_fai.pl af-only-gnomad.wgsh.hg38.noChr.vcf $fai > af-only-gnomad.wgs.hg38.noChr.vcf
+    bgzip af-only-gnomad.wgs.hg38.noChr.vcf
     tabix af-only-gnomad.wgs.hg38.noChr.vcf.gz
   fi
   """
@@ -539,12 +544,13 @@ process msisen {
 /* 7.0: PCGR/CPSR data bundle
 */
 process pcgr_data {
+  publishDir "$params.refDir/pcgr", mode: "copy", pattern: "data"
 
   errorStrategy 'retry'
   maxRetries 3
 
   output:
-  file('*') into completedpcgrdb
+  file('data') into completedpcgrdb
   file("data/${params.versionlc}/.vep/") into pcgrdbvep
   file("data/${params.versionlc}/RELEASE_NOTES") into pcgrreleasenotes
   file("data/${params.versionlc}/pcgr_configuration_default.toml") into pcgrtoml
@@ -566,21 +572,21 @@ process pcgr_data {
     rm -rf *.tgz
     """
 }
-
-process pcgr_save {
-
-  publishDir "$params.refDir/pcgr", mode: "copy"
-
-  input:
-  file(data) from completedpcgrdb
-
-  output:
-  file('data/') into savepcgrdb
-
-  script:
-  """
-  """
-}
+//
+// process pcgr_save {
+//
+//   publishDir "$params.refDir/pcgr", mode: "copy"
+//
+//   input:
+//   file(data) from completedpcgrdb
+//
+//   output:
+//   file('data/') into savepcgrdb
+//
+//   script:
+//   """
+//   """
+// }
 
 process pcgr_toml {
 
@@ -693,10 +699,13 @@ process hartwigmed {
   errorStrategy 'retry'
   maxRetries 3
 
+  input:
+  tuple file(fa), file(fai), file(dict) from fasta_dict_gridss
+
   output:
   file('dbs') into gpldld
   file('refgenomes/human_virus') into gpldle
-  file('GRIDSS_PON_37972v1') into gridsspon
+  file('gridss_*') into gridsspon
 
   script:
   if( params.version == 'GRCh37' )
@@ -708,6 +717,11 @@ process hartwigmed {
 
     curl -o GRIDSS_PON_37972v1.zip "${params.hartwigGRIDSSURL37}"
     unzip GRIDSS_PON_37972v1.zip
+
+    curl -o gridss_blacklist.bed.gz https://encode-public.s3.amazonaws.com/2011/05/04/f883c6e9-3ffc-4d16-813c-4c7d852d85db/ENCFF001TDObed.gz
+    cut -f 1 $fai > valid_chrs.txt
+    gunzip -c gridss_blacklist.bed.gz | sed 's/chr//g' > gridss_blacklist.bed
+    perl ${workflow.projectDir}/bin/exact_match_by_col.pl $fai,0 gridss_blacklist.bed,0 > gridss_blacklist.noChr.bed
     """
 
   // else
@@ -716,11 +730,18 @@ process hartwigmed {
   //   """
 }
 
+process gridss {
 
-java -Xmx3g -cp $GRIDSS_JAR gridss.AnnotateInsertedSequence \
-				REFERENCE_SEQUENCE=$reference \
-				INPUT=$raw_gridss_output \
-				OUTPUT=$annotated_gridss_output \
-				WORKER_THREADS=$threads \
-				ALIGNMENT=REPLACE \
-				REPEAT_MASKER_BED=hg19.fa.out.bed
+    publishDir path: "$params.refDir", mode: "copy"
+
+    output:
+    file('gridss.properties') into gridssout
+
+    script:
+    if( params.version == 'GRCh37' )
+    """
+    git clone https://github.com/PapenfussLab/gridss
+    mv gridss/src/main/resources/gridss.properties ./
+    """
+
+}
