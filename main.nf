@@ -1,15 +1,24 @@
 #!/usr/bin/env nextflow
 
 /*
- * nextflow run BarryDigby/DNAseq_references -profile standard, singularity --exometag exome
+ * nextflow run BarryDigby/DNAseq_references -profile standard, singularity --outDir /path/out/directory --exometag exome
  */ 
 
 params.gsurl37 = "gs://gatk-legacy-bundles/b37"
 params.exome_file = Channel.fromPath("/data/bdigby/WES/assets/20130108.exome.targets.bed").getVal()
 
+
+if(params.outDir){
+  params.refDir = "${params.outDir}"
+}
+if(!params.outDir){
+  params.refDir = "${workflow.launchDir}/${params.version}"
+}
+
+
 process dl_fasta{
 
-	publishDir "$baseDir/DNAref", mode: 'copy'
+	publishDir path: "$params.refDir", mode: "copy"
 
 	output:
 	tuple file('*noChr.fasta'), file('*noChr.fasta.fai') into (fasta_bwa, fasta_seqza, fasta_msi, fasta_dict, fasta_2bit, fasta_exome_biall, fasta_wgs_biall)
@@ -26,7 +35,7 @@ process dl_fasta{
 
 process dict_pr {
 
-	publishDir "$baseDir/DNAref", mode: 'copy'
+	publishDir path: "$params.refDir", mode: "copy"
 	
 	input:
 	tuple file(fa), file(fai) from fasta_dict
@@ -68,7 +77,7 @@ process dbsnp_dl{
 
 process ascat_loci{
 	
-	publishDir "$baseDir/DNAref", mode: 'copy'
+	publishDir path: "$params.refDir", mode: "copy"
 
 	input:
 	file(vcf) from ascatloci
@@ -87,7 +96,7 @@ process ascat_loci{
 
 process dict_pr2 {
 	
-	publishDir "$baseDir/DNAref", mode: 'copy'
+	publishDir path: "$params.refDir", mode: "copy"
 
 	input:
 	file(win_dict) from dict_win
@@ -105,7 +114,7 @@ process dict_pr2 {
 
 process exome_file {
 	
-	publishDir "$baseDir/DNAref", mode: 'copy'
+	publishDir path: "$params.refDir/exome", mode: "copy"
 
 	input:
 	file(exome) from Channel.value(params.exome_file)
@@ -133,7 +142,7 @@ process exome_file {
 
 process exome_bed_pr {
 
- 	publishDir "$baseDir/DNAref", mode: "copy", pattern: "*[.interval_list,.bed]"
+ 	publishDir path: "$params.refDir/exome", mode: "copy", pattern: "*[.interval_list,.bed]"
 
   	input:
   	tuple file(fa), file(fai), file(dict) from fasta_dict_exome
@@ -172,7 +181,7 @@ process exome_bed_pr {
 
 process tabix_files{
 	
-	publishDir "$baseDir/DNAref/exome/", mode: 'copy', pattern: 'exome'
+	publishDir path: "$params.refDir/exome", mode: "copy", pattern: "${params.exometag}*"
 
 	input:
 	file(bed) from exome_tabix
@@ -189,7 +198,7 @@ process tabix_files{
 
 process exome_biall{
 	
-	publishDir "$baseDir/DNAref/exome", mode: 'copy'
+	publishDir path: "$params.refDir/exome", mode: "copy"
 
 	input:
 	file(exomebed) from exome_biallgz
@@ -217,7 +226,7 @@ process exome_biall{
 
 process index_feature_files {
 	
-	publishDir "$baseDir/DNAseq", mode: 'copy'
+	publishDir path: "$params.refDir", mode: "copy"
 
 	input:
   	file(tbtbx) from vcf_tabix.flatten()
@@ -234,7 +243,7 @@ process index_feature_files {
 
 process bwa_index {
 
-        publishDir "$baseDir/DNAref", mode: 'copy'
+        publishDir path: "$params.refDir", mode: "copy"
 
         input:
         tuple file(fa), file(fai) from fasta_bwa
