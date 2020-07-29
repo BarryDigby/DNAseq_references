@@ -1,5 +1,9 @@
 #!/usr/bin/env nextflow
 
+/*
+ * nextflow run BarryDigby/DNAseq_references -profile standard, singularity --exometag exome
+ */ 
+
 params.gsurl37 = "gs://gatk-legacy-bundles/b37"
 params.exome_file = Channel.fromPath("/data/bdigby/WES/assets/20130108.exome.targets.bed").getVal()
 
@@ -107,7 +111,7 @@ process exome_file {
 	file(exome) from Channel.value(params.exome_file)
 
 	output:
-	file('*.file.bed') into exome_bed
+	file("${params.exometag}.file.bed") into exome_bed
 
 	script:
 	"""
@@ -115,13 +119,13 @@ process exome_file {
         ##remove any non-chr, coord lines in top of file
         CHR=\$(tail -n1 $exome | perl -ane 'print \$F[0];')
         if [[ \$CHR =~ "chr" ]]; then
-           perl -ane 'if(\$F[0]=~m/^chr/){print \$_;}' $exome >  exome.file.bed
+           perl -ane 'if(\$F[0]=~m/^chr/){print \$_;}' $exome >  ${params.exometag}.file.bed
         else
-           perl -ane 'if(\$F[0]=~m/^[0-9MXY]/){print \$_;}' $exome >  exome.file.bed
+           perl -ane 'if(\$F[0]=~m/^[0-9MXY]/){print \$_;}' $exome >  ${params.exometag}.file.bed
         fi
        
 	else
-        echo "BED file is not a BED file, please retry"
+        echo "BED file $exome is not a BED file, please retry"
         exit 147
     	fi
 	"""
@@ -136,28 +140,32 @@ process exome_bed_pr {
   	file(exomelift) from exome_bed
 
   	output:
-  	file("*.bed.interval_list") into complete_exome
-  	file("*.bed") into (exome_tabix, exome_biallgz)
+  	file("${params.exometag}.bed.interval_list") into complete_exome
+  	file("${params.exometag}.bed") into (exome_tabix, exome_biallgz)
 
   	script:
   	"""
   	##must test if all chr in fasta are in exome, else manta cries
   	##must test if all regions are greater than length zero or strelka cries
   	##must test if all seq.dict chrs are in bed and only they or BedToIntervalList cries
-  	perl -ane 'if(\$F[1] == \$F[2]){\$F[2]++;} if(\$F[0] !~m/^chrM/){print join("\\t", @F[0..\$#F]) . "\\n";}' $exomelift | grep -v chrM | sed 's/chr//g' > tmp.bed
+  	
+	perl -ane 'if(\$F[1] == \$F[2]){\$F[2]++;} if(\$F[0] !~m/^chrM/){print join("\\t", @F[0..\$#F]) . "\\n";}' $exomelift | grep -v chrM | sed 's/chr//g' > tmp.bed
    	grep @SQ $dict | cut -f2 | sed 's/SN://' | while read CHR; do
    	TESTCHR=\$(awk -v chrs=\$CHR '\$1 == chrs' tmp.bed | wc -l)
-   	if [[ \$TESTCHR != 0 ]];then
-    	 awk -v chrs=\$CHR '\$1 == chrs' tmp.bed
+   	
+	if [[ \$TESTCHR != 0 ]];then
+    	  awk -v chrs=\$CHR '\$1 == chrs' tmp.bed
    	fi
   	done >> tmp.dict.bed
-  
+  	
 	##always make interval list so we are in line with fasta
-  	picard BedToIntervalList I=tmp.dict.bed O=exome.interval_list SD=$dict
-  	##BedToIntervalList (reason unknown) makes 1bp interval to 0bp interval, replace with original
-  	perl -ane 'if(\$F[0]=~m/^@/){print \$_;next;} if(\$F[1] == \$F[2]){\$f=\$F[1]; \$f--; \$F[1]=\$f; print join("\\t", @F[0..\$#F]) . "\\n";} else{print \$_;}' exome.interval_list > exome.bed.interval_list
-  	##output BED
-  	grep -v "@" exome.bed.interval_list | cut -f 1,2,3,5 > exome.bed
+  	picard BedToIntervalList I=tmp.dict.bed O=${params.exometag}.interval_list SD=$dict
+  	
+	##BedToIntervalList (reason unknown) makes 1bp interval to 0bp interval, replace with original
+  	perl -ane 'if(\$F[0]=~m/^@/){print \$_;next;} if(\$F[1] == \$F[2]){\$f=\$F[1]; \$f--; \$F[1]=\$f; print join("\\t", @F[0..\$#F]) . "\\n";} else{print \$_;}' ${params.exometag}.interval_list > ${params.exometag}.bed.interval_list
+  	
+	##output BED
+  	grep -v "@" ${params.exometag}.bed.interval_list | cut -f 1,2,3,5 > ${params.exometag}.bed
   	"""
 }
 
