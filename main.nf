@@ -200,7 +200,7 @@ process exome_biall{
     	tabix af-only-gnomad.raw.sites.vcf.gz
     	gunzip -c af-only-gnomad.raw.sites.vcf.gz |
     	bcftools view -R exome.biall.bed af-only-gnomad.raw.sites.vcf.gz | bcftools sort -T '.' > af-only-gnomad.exomerh.hg19.noChr.vcf
-    	perl ~/reheader_vcf_fai.pl af-only-gnomad.exomerh.hg19.noChr.vcf $fai > af-only-gnomad.exome.hg19.noChr.vcf
+    	perl ${workflow.projectDir}/bin/reheader_vcf_fai.pl af-only-gnomad.exomerh.hg19.noChr.vcf $fai > af-only-gnomad.exome.hg19.noChr.vcf
     	bgzip af-only-gnomad.exome.hg19.noChr.vcf
     	tabix af-only-gnomad.exome.hg19.noChr.vcf.gz
 	"""
