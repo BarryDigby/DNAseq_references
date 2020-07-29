@@ -1,0 +1,10 @@
+name: DNAseq_references
+channels:
+  - bioconda
+dependencies:
+  - bioconda::bcftools=1.9
+  - bioconda::bedtools=2.28.0
+  - bioconda::bwa=0.7.17
+  - bioconda::gatk4=4.1.2.0
+  - bioconda::picard=2.20.3
+  - bioconda::samtools=1.9
