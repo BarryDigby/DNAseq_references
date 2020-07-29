@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 params.gsurl37 = "gs://gatk-legacy-bundles/b37"
-params.exome_file = "/data/bdigby/WES/assets/20130108.exome.targets.bed"
+params.exome_file = Channel.fromPath("/data/bdigby/WES/assets/20130108.exome.targets.bed").getVal()
 
 process dl_fasta{
 
@@ -104,7 +104,7 @@ process exome_file {
 	publishDir "$baseDir/DNAref", mode: 'copy'
 
 	input:
-	path(exome) from params.exome_file
+	file(exome) from Channel.value(params.exome_file)
 
 	output:
 	file('*.file.bed') into exome_bed
