@@ -256,3 +256,42 @@ process bwa_index {
         bwa index -a bwtsw $fa
         """
 }
+
+
+process vepdb {
+
+	publishDir "/data/VEP/GRCh37", mode: "copy"
+
+	output:	
+	file('.vep/homo_sapiens') into complete_vepdb
+
+	script:
+  	"""
+	vep_install \
+      	--AUTO cf \
+      	--CACHE_VERSION 99 \
+      	--CACHEDIR "/data/VEP/GRCh37 \
+      	--SPECIES "homo_sapiens" \
+      	--ASSEMBLY GRCh37 \
+      	--NO_UPDATE \
+      	--NO_HTSLIB \
+      	--NO_BIOPERL \
+      	--NO_TEST
+  	"""
+}
+
+process snpEff {
+
+	publishDir "/data/snpEff/GRCh37", mode: "copy"
+	
+	output:
+	file('*.zip') into snpEff_cache
+	
+	script:
+	"""
+	wget https://deac-ams.dl.sourceforge.net/project/snpeff/databases/v4_3/snpEff_v4_3_GRCh37.87.zip
+	"""
+}
+	
+	
+	
