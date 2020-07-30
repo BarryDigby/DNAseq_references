@@ -290,7 +290,7 @@ process snpEff {
 	script:
 	"""
 	wget https://deac-ams.dl.sourceforge.net/project/snpeff/databases/v4_3/snpEff_v4_3_GRCh37.87.zip
-	gunzip snpEff_v4_3_GRCh37.87.zip
+	unzip snpEff_v4_3_GRCh37.87.zip
 	"""
 }
 	
