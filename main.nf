@@ -285,11 +285,12 @@ process snpEff {
 	publishDir "/data/snpEff/GRCh37", mode: "copy"
 	
 	output:
-	file('*.zip') into snpEff_cache
+	file('*') into snpEff_cache
 	
 	script:
 	"""
 	wget https://deac-ams.dl.sourceforge.net/project/snpeff/databases/v4_3/snpEff_v4_3_GRCh37.87.zip
+	gunzip snpEff_v4_3_GRCh37.87.zip
 	"""
 }
 	
