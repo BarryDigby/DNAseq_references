@@ -270,9 +270,9 @@ process vepdb {
 	vep_install \
       	--AUTO cf \
       	--CACHE_VERSION 99 \
-      	--CACHEDIR /data/VEP/GRCh37 \
-      	--SPECIES homo_sapiens \
-      	--ASSEMBLY GRCh37 \
+      	--CACHEDIR "./" \
+      	--SPECIES "homo_sapiens" \
+      	--ASSEMBLY "GRCh37" \
       	--NO_UPDATE \
       	--NO_HTSLIB \
       	--NO_BIOPERL \
