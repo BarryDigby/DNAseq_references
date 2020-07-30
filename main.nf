@@ -263,12 +263,12 @@ process vepdb {
 	publishDir "/data/VEP/GRCh37", mode: "copy"
 
 	output:	
-	file('.vep/homo_sapiens') into complete_vepdb
+	file('*') into complete_vepdb
 
 	script:
   	"""
 	vep_install \
-      	--AUTO cf \
+      	--AUTO c \
       	--CACHE_VERSION 99 \
       	--CACHEDIR "./" \
       	--SPECIES "homo_sapiens" \
