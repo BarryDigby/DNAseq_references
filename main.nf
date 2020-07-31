@@ -213,58 +213,58 @@ process index_feature_files {
   	"""
 }
 
-//process bwa_index {
-//
-//        publishDir path: "$params.refDir", mode: "copy"
-//
-//        input:
-//        tuple file(fa), file(fai) from fasta_bwa
-//
-//        output:
-//        file('*') into complete_bwa/
-//
-//        script:
-//        """
-//        bwa index -a bwtsw $fa
-//        """
-//}
+process bwa_index {
+
+        publishDir path: "$params.refDir", mode: "copy"
+
+        input:
+        tuple file(fa), file(fai) from fasta_bwa
+
+        output:
+        file('*') into complete_bwa/
+
+        script:
+        """
+        bwa index -a bwtsw $fa
+        """
+}
 
 
-//process vepdb {
-//
-//	publishDir "/data/VEP/GRCh37", mode: "copy"
-//
-//	output:	
-//	file('*') into complete_vepdb
-//
-//	script:
-//  	"""
-//	vep_install \
-//      	--AUTO c \
-//      	--CACHE_VERSION 99 \
-//      	--CACHEDIR "./" \
-//      	--SPECIES "homo_sapiens" \
-//      	--ASSEMBLY "GRCh37" \
-//     	--NO_UPDATE \
-//      	--NO_HTSLIB \
-//      	--NO_BIOPERL \
-//      	--NO_TEST
-//  	"""
-//}
+process vepdb {
 
-//process snpEff {
-//
-//	publishDir "/data/snpEff/GRCh37", mode: "copy"
-//	
-//	output:
-//	file('*') into snpEff_cache
-//	
-//	script:
-//	"""
-//	wget https://deac-ams.dl.sourceforge.net/project/snpeff/databases/v4_3/snpEff_v4_3_GRCh37.87.zip
-//	unzip snpEff_v4_3_GRCh37.87.zip
-//	"""
-//}
+	publishDir "/data/VEP/GRCh37", mode: "copy"
+
+	output:	
+	file('*') into complete_vepdb
+
+	script:
+  	"""
+	vep_install \
+      	--AUTO c \
+      	--CACHE_VERSION 99 \
+      	--CACHEDIR "./" \
+      	--SPECIES "homo_sapiens" \
+      	--ASSEMBLY "GRCh37" \
+     	--NO_UPDATE \
+      	--NO_HTSLIB \
+      	--NO_BIOPERL \
+      	--NO_TEST
+  	"""
+}
+
+process snpEff {
+
+	publishDir "/data/snpEff/GRCh37", mode: "copy"
+	
+	output:
+	file('*') into snpEff_cache
+	
+	script:
+	"""
+	wget https://deac-ams.dl.sourceforge.net/project/snpeff/databases/v4_3/snpEff_v4_3_GRCh37.87.zip
+	unzip snpEff_v4_3_GRCh37.87.zip
+	"""
+}
 	
 	
 	
