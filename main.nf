@@ -240,7 +240,7 @@ process vepdb {
 	script:
   	"""
 	vep_install \
-      	--AUTO c \
+      	--AUTO cf \
       	--CACHE_VERSION 99 \
       	--CACHEDIR "./" \
       	--SPECIES "homo_sapiens" \
