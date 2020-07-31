@@ -5,7 +5,7 @@
  */ 
 
 params.gsurl37 = "gs://gatk-legacy-bundles/b37"
-params.exome_file = Channel.fromPath("/data/bdigby/WES/assets/20130108.exome.targets.bed").getVal()
+params.exome_url = "ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/technical/reference/exome_pull_down_targets/20130108.exome.targets.bed" 
 
 
 if(params.outDir){
@@ -112,31 +112,27 @@ process dict_pr2 {
 }
 
 
-process exome_file {
+process exome_url {
 	
 	publishDir path: "$params.refDir/exome", mode: "copy"
-
-	input:
-	file(exome) from Channel.value(params.exome_file)
 
 	output:
 	file("${params.exometag}.file.bed") into exome_bed
 
 	script:
 	"""
-	if [[ $exome =~ bed\$ ]]; then
-        ##remove any non-chr, coord lines in top of file
-        CHR=\$(tail -n1 $exome | perl -ane 'print \$F[0];')
-        if [[ \$CHR =~ "chr" ]]; then
-           perl -ane 'if(\$F[0]=~m/^chr/){print \$_;}' $exome >  ${params.exometag}.file.bed
-        else
-           perl -ane 'if(\$F[0]=~m/^[0-9MXY]/){print \$_;}' $exome >  ${params.exometag}.file.bed
-        fi
-       
-	else
-        echo "BED file $exome is not a BED file, please retry"
-        exit 147
-    	fi
+    	wget ${params.exomebedurl}
+    	if [[ ${params.exomebedurl} =~ zip\$ ]]; then
+      	   unzip -p *.zip > ${params.exometag}.bed
+    	elif [[ ${params.exomebedurl} =~ bed\$ ]]; then
+      	
+	##remove any non-chr, coord lines in top of file
+      	CHR=\$(tail -n1 ${params.exomebedurl} | perl -ane 'print \$F[0];')
+      	if [[ \$CHR =~ "chr" ]]; then
+           perl -ane 'if(\$F[0]=~m/^chr/){print \$_;}' ${params.exomebedurl} >  ${params.exometag}.bed
+      	else
+           perl -ane 'if(\$F[0]=~m/^[0-9MXY]/){print \$_;}' ${params.exomebedurl} >  ${params.exometag}.bed
+      	fi
 	"""
 }
 
