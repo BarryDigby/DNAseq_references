@@ -121,7 +121,7 @@ process exome_file {
 
 	script:
 	"""
-    	wget ${params.exomebedurl}
+    	wget ${params.exome_url}
 
 	##remove chr, keep in line with reference files
       	sed 's/chr//g' *.bed > ${params.exometag}.bed
