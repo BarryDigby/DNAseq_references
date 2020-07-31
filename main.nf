@@ -213,21 +213,21 @@ process index_feature_files {
   	"""
 }
 
-process bwa_index {
-
-        publishDir path: "$params.refDir", mode: "copy"
-
-        input:
-        tuple file(fa), file(fai) from fasta_bwa
-
-        output:
-        file('*') into complete_bwa/
-
-        script:
-        """
-        bwa index -a bwtsw $fa
-        """
-}
+//process bwa_index {
+//
+//        publishDir path: "$params.refDir", mode: "copy"
+//
+//        input:
+//        tuple file(fa), file(fai) from fasta_bwa
+//
+//        output:
+ //       file('*') into complete_bwa/
+//
+//        script:
+//        """
+//        bwa index -a bwtsw $fa
+//        """
+//}
 
 
 process vepdb {
@@ -235,7 +235,7 @@ process vepdb {
 	publishDir "/data/VEP/GRCh37", mode: "copy"
 
 	output:	
-	file('*') into complete_vepdb
+	file('.vep/homo_sapiens') into complete_vepdb
 
 	script:
   	"""
