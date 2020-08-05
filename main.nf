@@ -261,7 +261,7 @@ process snpEff {
 	
 	script:
 	"""
-	snpEff download GRCh37.87
+	snpEff download GRCh37.75
 	"""
 }
 	
