@@ -261,7 +261,7 @@ process snpEff {
 	
 	script:
 	"""
-	snpEff download -c /opt/conda/envs/DNAseq_references/share/snpeff-4.3.1t-3/snpEff.config -v GRCh37.87
+	snpEff download GRCh37.87
 	"""
 }
 	
