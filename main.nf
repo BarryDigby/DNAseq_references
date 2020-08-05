@@ -254,15 +254,14 @@ process vepdb {
 
 process snpEff {
 
-	publishDir "/data/snpEff/GRCh37", mode: "copy"
+	publishDir "/data/snpEff", mode: "copy"
 	
 	output:
 	file('*') into snpEff_cache
 	
 	script:
 	"""
-	wget https://deac-ams.dl.sourceforge.net/project/snpeff/databases/v4_3/snpEff_v4_3_GRCh37.87.zip
-	unzip snpEff_v4_3_GRCh37.87.zip
+	snpEff download -c /opt/conda/envs/Germline_VC/share/snpeff-4.3.1t-3/snpEff.config -v GRCh37.87
 	"""
 }
 	
