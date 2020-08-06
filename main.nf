@@ -257,7 +257,7 @@ process snpEff {
 	publishDir "/data/snpEff", mode: "copy"
 	
 	output:
-	file('*') into snpEff_cache
+	file('GRCh37.75/*.bin') into snpEff_cache
 	
 	script:
 	"""
