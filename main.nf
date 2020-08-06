@@ -261,6 +261,7 @@ process snpEff {
 	
 	script:
 	"""
+	mkdir -p /data/snpEff/GRCh37.75
 	snpEff download GRCh37.75 -dataDir /data/snpEff
 	"""
 }
