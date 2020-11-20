@@ -5,7 +5,7 @@
 [NextFlow](https://www.nextflow.io/index.html#GetStarted), [Singularity](https://sylabs.io/guides/3.0/user-guide/installation.html#)
 #### Reference Generation:
 ```
-nextflow run brucemoran/DNAseq_references
+nextflow run BarryDigby/DNAseq_references
 ```
 ```
 Optional arguments:
